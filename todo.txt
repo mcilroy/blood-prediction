@@ -1,0 +1,17 @@
+network configuration
+    decaying learning rate
+    use moving average for prediction
+network
+    increase depth of convnet to 7x7 filter output
+    weight decay
+-summary writing
+    -training curve
+    -save model periodically
+distorting inputs
+    based on color, hue, lighting
+    cropping
+    zooming
+visualize
+    bug: tensorboard only displays only a few images
+    visualize filters at each layer
+    visualize output of poorly performing cells

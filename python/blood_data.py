@@ -1,6 +1,8 @@
 import numpy as np
 import tensorflow as tf
-DATA_LOCATION = '../../../AlanFine/monocytes_neutrophils.npz'
+import os
+
+DATA_LOCATION = '../../../AlanFine'
 
 
 def dense_to_one_hot(labels_dense, num_classes):
@@ -28,27 +30,34 @@ def load_data(train_dir, fake_data=False, one_hot=False, dtype=tf.float32):
         data_sets.test = fake()
         return data_sets
     TRAINING_SIZE = 1000
-    data = np.load(DATA_LOCATION)
-    neutrophils = np.rollaxis(data['neutrophils'], 1, 4)  # 1000, 3, 81, 81 possibly -> 1000, 81, 81, 3
-    monocytes = np.rollaxis(data['monocytes'], 1, 4)
+    VALIDATION_SIZE = 294
+    train_val = np.load(os.path.join(DATA_LOCATION, 'monocytes_neutrophils.npz'))
+    test = np.load(os.path.join(DATA_LOCATION, 'mono_neut_test.npz'))
+    # stored as batch, depth, height, width. Tensorflow wants -> batch, height, width, depth
+    neutrophils = np.rollaxis(train_val['neutrophils'], 1, 4)
+    monocytes = np.rollaxis(train_val['monocytes'], 1, 4)
 
-    training_images = np.concatenate([neutrophils[0:TRAINING_SIZE], monocytes[0:TRAINING_SIZE]])
-    training_labels = np.concatenate([
-        dense_to_one_hot(np.ones((TRAINING_SIZE, 1), dtype=np.int), 2),
-        dense_to_one_hot(np.zeros((TRAINING_SIZE, 1), dtype=np.int), 2)])
+    test_neutrophils = np.rollaxis(test['neut'], 1, 4)
+    test_monocytes = np.rollaxis(test['mono'], 1, 4)
 
-    validation_images = np.concatenate([neutrophils[TRAINING_SIZE:],
-                                      monocytes[TRAINING_SIZE:]])
+    validation_images = np.concatenate([neutrophils[:VALIDATION_SIZE],
+                                        monocytes[:VALIDATION_SIZE]])
     validation_labels = np.concatenate([
-        dense_to_one_hot(np.ones((neutrophils.shape[0]-TRAINING_SIZE, 1), dtype=np.int), 2),
-        dense_to_one_hot(np.zeros((monocytes.shape[0] - TRAINING_SIZE, 1), dtype=np.int), 2)])
+        dense_to_one_hot(np.ones((VALIDATION_SIZE, 1), dtype=np.int), 2),
+        dense_to_one_hot(np.zeros((VALIDATION_SIZE, 1), dtype=np.int), 2)])
 
-    testing_images = []
-    testing_labels = []
+    training_images = np.concatenate([neutrophils[VALIDATION_SIZE:], monocytes[VALIDATION_SIZE:]])
+    training_labels = np.concatenate([
+        dense_to_one_hot(np.ones((neutrophils.shape[0]-VALIDATION_SIZE, 1), dtype=np.int), 2),
+        dense_to_one_hot(np.zeros((monocytes.shape[0] - VALIDATION_SIZE, 1), dtype=np.int), 2)])
+
+    testing_images = np.concatenate([test_neutrophils, test_monocytes])
+    testing_labels = np.concatenate([dense_to_one_hot(np.ones((test_neutrophils.shape[0], 1), dtype=np.int), 2),
+                                     dense_to_one_hot(np.zeros((test_monocytes.shape[0], 1), dtype=np.int), 2)])
 
     data_sets.train = DataSet(training_images, training_labels, fake_data=False, one_hot=True, dtype=tf.uint8)
     data_sets.validation = DataSet(validation_images, validation_labels, fake_data=False, one_hot=True, dtype=tf.uint8)
-    #data_sets.testing = DataSet(testing_labels, testing_labels)
+    data_sets.testing = DataSet(testing_images, testing_labels, fake_data=False, one_hot=True, dtype=tf.uint8)
     return data_sets
 
 
@@ -97,20 +106,23 @@ class DataSet(object):
         start = self._index_in_epoch
         self._index_in_epoch += batch_size
         if self._index_in_epoch > self._num_examples:
-           # Finished epoch
-           self._epochs_completed += 1
-           # Shuffle the data
-           perm = np.arange(self._num_examples)
-           np.random.shuffle(perm)
-           self._images = self._images[perm]
-           self._labels = self._labels[perm]
-           # Start next epoch
-           start = 0
-           self._index_in_epoch = batch_size
-           assert batch_size <= self._num_examples
+            # Finished epoch
+            self._epochs_completed += 1
+            # Shuffle the data
+            perm = np.arange(self._num_examples)
+            np.random.shuffle(perm)
+            self._images = self._images[perm]
+            self._labels = self._labels[perm]
+            # Start next epoch
+            start = 0
+            self._index_in_epoch = batch_size
+            assert batch_size <= self._num_examples
         end = self._index_in_epoch
         return self._images[start:end], self._labels[start:end]
 
     @property
     def images(self):
         return self._images
+    @property
+    def labels(self):
+        return self._labels
