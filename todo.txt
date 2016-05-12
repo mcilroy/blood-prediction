@@ -1,6 +1,7 @@
 network configuration
     decaying learning rate
     use moving average for prediction
+    change variance -> std deviation, need to restart for it to work
 network
     increase depth of convnet to 7x7 filter output
     weight decay
@@ -12,6 +13,8 @@ distorting inputs
     cropping
     zooming
 visualize
-    bug: tensorboard only displays only a few images
+    visualize images by class
     visualize filters at each layer
     visualize output of poorly performing cells
+refactor
+    evaluation should be in a separate file

@@ -3,6 +3,8 @@ import numpy as np
 from blood_data import load_data
 import os.path
 import re
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import ImageGrid
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -77,6 +79,48 @@ def _activation_summary(x):
     tf.histogram_summary(tensor_name + '/activations', x)
     tf.scalar_summary(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
+
+def show_hard_images(images_used, batch_predictions):
+
+    fig = plt.figure()
+    grid = ImageGrid(fig, 111, nrows_ncols=(5, 2),
+                     axes_pad=0.1,)
+    count = 0
+    for i, val in enumerate(batch_predictions):
+        if 0.4 <= val[1] <= 0.6:
+            #imgplot = plt.imshow(images_used[i, :, :, :])
+            grid[count].imshow(images_used[i])
+            count = count + 1
+        #else:
+            #imgplot = plt.imshow(images_used[i, :, :, :])
+        if count >= 10:
+            break
+    plt.show()
+
+
+
+
+    # hard_images = []
+    # for i, val in enumerate(batch_predictions):
+    #     if 0.4 <= val[1] <= 0.6:
+    #         if hard_images == []:
+    #             hard_images = images_used[i, :, :, :]
+    #         else:
+    #             if hard_images.ndim == 4:
+    #                 hard_images = np.concatenate(
+    #                     [hard_images, images_used[None, i, :, :, :]])
+    #             else:
+    #                 hard_images = np.concatenate(
+    #                     [hard_images[None, :, :, :], images_used[None, i, :, :, :]])
+    #
+    # fig = plt.figure(1, (4., 4.))
+    # grid = ImageGrid(fig, 111, nrows_ncols=(int((hard_images.shape[0]/2)+1), 2),
+    #                  axes_pad=0.1,)
+    # for i in range(hard_images.shape[0]):
+    #     grid[i].imshow(hard_images[i])
+    # plt.show()
+    # return hard_images
+
 W_conv1 = weight_variable([5, 5, 3, 32])
 b_conv1 = bias_variable([32])
 
@@ -107,6 +151,8 @@ cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(y_conv), reduction_ind
 train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+predictions = y_conv
 
 tf.scalar_summary('accuracy', accuracy)
 
@@ -147,19 +193,31 @@ for step in range(global_step+1, FLAGS.max_steps):
     batch = blood.train.next_batch(FLAGS.batch_size)
     train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
     if step % 100 == 0:
+
+        batch_val = blood.validation.next_batch_untouched(FLAGS.batch_size)
+        predictions = sess.run(predictions, feed_dict={
+            x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})
+        show_hard_images(batch_val[1], predictions)
+
         summary, train_accuracy = sess.run([summary_op, accuracy], feed_dict={
             x: batch[0], y_: batch[1], keep_prob: 1.0})
         train_writer.add_summary(summary, step)
         print("step %d, training accuracy %g" % (step, train_accuracy))
-    if (step % 300 == 0 or (step + 1) == FLAGS.max_steps) and not step == 0:
+
+        #imgplot = plt.imshow(images[0, :, :, :])
+        #imgplot2 = plt.imshow(images[1, :, :, :])
+
+    if (step % 1000 == 0 or (step + 1) == FLAGS.max_steps) and not step == 0:
         summary_validation, accuracy_validation = sess.run([summary_op, accuracy], feed_dict={
                 x: blood.validation.images, y_: blood.validation.labels, keep_prob: 1.0})
         validation_writer.add_summary(summary_validation, step)
         print("validation accuracy %g" % accuracy_validation)
+
         summary_test, accuracy_test = sess.run([summary_op, accuracy], feed_dict={
                 x: blood.testing.images, y_: blood.testing.labels, keep_prob: 1.0})
         test_writer.add_summary(summary_test, step)
         print("test accuracy %g" % accuracy_test)
+
         # save checkpoint
         checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=step)

@@ -91,7 +91,12 @@ class DataSet(object):
         np.random.shuffle(perm)
         self._images = self._images[perm]
         self._labels = self._labels[perm]
-        self._images = (self._images - np.mean(self._images))/np.var(self._images)
+
+        self._images_original = np.copy(self._images)
+
+        self.mean = np.mean(self._images)
+        self.std = np.var(self._images)  # bub: should be std
+        self._images = (self._images - self.mean)/self.std
 
     def next_batch(self, batch_size, fake_data=False):
         """Return the next `batch_size` examples from this data set."""
@@ -120,9 +125,29 @@ class DataSet(object):
         end = self._index_in_epoch
         return self._images[start:end], self._labels[start:end]
 
+    def next_batch_untouched(self, batch_size, fake_data=False):
+        """Return the next `batch_size` examples from this data set."""
+        start = self._index_in_epoch
+        self._index_in_epoch += batch_size
+        if self._index_in_epoch > self._num_examples:
+            # Finished epoch
+            self._epochs_completed += 1
+            # Shuffle the data
+            perm = np.arange(self._num_examples)
+            np.random.shuffle(perm)
+            self._images = self._images[perm]
+            self._labels = self._labels[perm]
+            # Start next epoch
+            start = 0
+            self._index_in_epoch = batch_size
+            assert batch_size <= self._num_examples
+        end = self._index_in_epoch
+        return self._images[start:end], self._images_original[start:end], self._labels[start:end]
+
     @property
     def images(self):
         return self._images
+
     @property
     def labels(self):
         return self._labels
