@@ -19,7 +19,7 @@ tf.app.flags.DEFINE_string('restart', False,
 tf.app.flags.DEFINE_string('batch_size', 50,
                            """batch size""")
 TOWER_NAME = 'tower'
-blood = load_data(FLAGS.train_dir, fake_data=False, one_hot=True, dtype=tf.uint8)
+blood = load_data(fake_data=False, one_hot=True, dtype=tf.uint8)
 
 sess = tf.InteractiveSession()
 
@@ -64,10 +64,8 @@ def variable_summaries(var, name):
 
 def _activation_summary(x):
     """Helper to create summaries for activations.
-
     Creates a summary that provides a histogram of activations.
     Creates a summary that measure the sparsity of activations.
-
     Args:
     x: Tensor
     Returns:
@@ -96,30 +94,6 @@ def show_hard_images(images_used, batch_predictions):
         if count >= 10:
             break
     plt.show()
-
-
-
-
-    # hard_images = []
-    # for i, val in enumerate(batch_predictions):
-    #     if 0.4 <= val[1] <= 0.6:
-    #         if hard_images == []:
-    #             hard_images = images_used[i, :, :, :]
-    #         else:
-    #             if hard_images.ndim == 4:
-    #                 hard_images = np.concatenate(
-    #                     [hard_images, images_used[None, i, :, :, :]])
-    #             else:
-    #                 hard_images = np.concatenate(
-    #                     [hard_images[None, :, :, :], images_used[None, i, :, :, :]])
-    #
-    # fig = plt.figure(1, (4., 4.))
-    # grid = ImageGrid(fig, 111, nrows_ncols=(int((hard_images.shape[0]/2)+1), 2),
-    #                  axes_pad=0.1,)
-    # for i in range(hard_images.shape[0]):
-    #     grid[i].imshow(hard_images[i])
-    # plt.show()
-    # return hard_images
 
 W_conv1 = weight_variable([5, 5, 3, 32])
 b_conv1 = bias_variable([32])
@@ -222,14 +196,3 @@ for step in range(global_step+1, FLAGS.max_steps):
         checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=step)
 
-
-
-
-# to visualize output of poor performing cells
-    # get predictions of each image in a batch
-        # predictions = y_conv (batch_size, 2)
-        # if predictions are bad put in bad_predictions
-    # tf.image_summary('bad_predictions', bad_predictions, 50)
-    # summary_bad = sess.run(bad_predictions_op, feed_dict={
-    # x: blood_validation.images, y: blood_validation.labels, keep_prob: 1.0})
-    # bad_writer.add_summary(summary_bad, step)

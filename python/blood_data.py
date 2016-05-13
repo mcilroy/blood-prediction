@@ -18,7 +18,7 @@ def dense_to_one_hot(labels_dense, num_classes):
     return labels_one_hot
 
 
-def load_data(train_dir, fake_data=False, one_hot=False, dtype=tf.float32):
+def inputs(fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
     class DataSets(object):
         pass
     data_sets = DataSets()
@@ -55,14 +55,17 @@ def load_data(train_dir, fake_data=False, one_hot=False, dtype=tf.float32):
     testing_labels = np.concatenate([dense_to_one_hot(np.ones((test_neutrophils.shape[0], 1), dtype=np.int), 2),
                                      dense_to_one_hot(np.zeros((test_monocytes.shape[0], 1), dtype=np.int), 2)])
 
-    data_sets.train = DataSet(training_images, training_labels, fake_data=False, one_hot=True, dtype=tf.uint8)
-    data_sets.validation = DataSet(validation_images, validation_labels, fake_data=False, one_hot=True, dtype=tf.uint8)
-    data_sets.testing = DataSet(testing_images, testing_labels, fake_data=False, one_hot=True, dtype=tf.uint8)
+    data_sets.train = DataSet(training_images, training_labels, fake_data=False, one_hot=True, dtype=tf.uint8,
+                              eval_data=eval_data)
+    data_sets.validation = DataSet(validation_images, validation_labels, fake_data=False, one_hot=True, dtype=tf.uint8,
+                                   eval_data=eval_data)
+    data_sets.testing = DataSet(testing_images, testing_labels, fake_data=False, one_hot=True, dtype=tf.uint8,
+                                eval_data=eval_data)
     return data_sets
 
 
 class DataSet(object):
-    def __init__(self, images, labels, fake_data=False, one_hot=False, dtype=tf.float32):
+    def __init__(self, images, labels, fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
         """Construct a DataSet. one_hot arg is used only if fake_data is true.  `dtype` can be either `uint8` to leave
          the input as `[0, 255]`, or `float32` to rescale into `[0, 1]`. """
         dtype = tf.as_dtype(dtype).base_dtype
@@ -91,12 +94,14 @@ class DataSet(object):
         np.random.shuffle(perm)
         self._images = self._images[perm]
         self._labels = self._labels[perm]
-
-        self._images_original = np.copy(self._images)
+        self._eval_data = eval_data
+        if self._eval_data:
+            self._images_original = np.copy(self._images)
 
         self.mean = np.mean(self._images)
-        self.std = np.var(self._images)  # bub: should be std
-        self._images = (self._images - self.mean)/self.std
+        #self.std = max(np.std(self._images), 1.0/np.sqrt(self._images.size))
+        self.var = np.var(self._images)
+        self._images = (self._images - self.mean)/self.var
 
     def next_batch(self, batch_size, fake_data=False):
         """Return the next `batch_size` examples from this data set."""
@@ -126,7 +131,15 @@ class DataSet(object):
         return self._images[start:end], self._labels[start:end]
 
     def next_batch_untouched(self, batch_size, fake_data=False):
-        """Return the next `batch_size` examples from this data set."""
+        """Return the next "batch_size" examples from this data set."""
+        if fake_data:
+            fake_image = [1] * 81*81
+            if self.one_hot:
+                fake_label = [1] + [0] * 2
+            else:
+                fake_label = 0
+            return [fake_image for _ in xrange(batch_size)], [
+                fake_label for _ in xrange(batch_size)]
         start = self._index_in_epoch
         self._index_in_epoch += batch_size
         if self._index_in_epoch > self._num_examples:
@@ -142,6 +155,7 @@ class DataSet(object):
             self._index_in_epoch = batch_size
             assert batch_size <= self._num_examples
         end = self._index_in_epoch
+        assert self._eval_data is True
         return self._images[start:end], self._images_original[start:end], self._labels[start:end]
 
     @property

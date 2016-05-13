@@ -1,94 +1,128 @@
 import tensorflow as tf
+import blood_model
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import ImageGrid
+import numpy as np
 
 FLAGS = tf.app.flags.FLAGS
+RUN = 'run2'
+tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/blood_train_tmp',
+                           """Directory where to read model checkpoints.""")
+tf.app.flags.DEFINE_string('batch_size', 50,
+                           """batch size""")
 
-tf.app.flags.DEFINE_string('eval_dir', 'blood_eval_tmp',
-                        """Directory where to write event logs.""")
-tf.app.flags.DEFINE_string('checkpoint_dir', 'blood_train_tmp',
-                        """Directory where to read model checkpoints.""")
 
-def eval_once(saver, summary_writer, top_k_op, summary_op):
-   """Run Eval once.
+def show_hard_images(images_used, batch_predictions):
 
-   Args:
-     saver: Saver.
-     summary_writer: Summary writer.
-     top_k_op: Top K op.
-     summary_op: Summary op.
-   """
-   with tf.Session() as sess:
-     ckpt = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
-     if ckpt and ckpt.model_checkpoint_path:
-       # Restores from checkpoint
-       saver.restore(sess, ckpt.model_checkpoint_path)
-       # extract global_step from it.
-       global_step = ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1]
-       print("checkpoint found at step %d", global_step)
-     else:
-       print('No checkpoint file found')
-       return
+    fig = plt.figure()
+    grid = ImageGrid(fig, 111, nrows_ncols=(5, 2),
+                     axes_pad=0.1,)
+    count = 0
+    for i, val in enumerate(batch_predictions):
+        if 0.4 <= val[1] <= 0.6:
+            grid[count].imshow(images_used[i])
+            count += 1
+        if count >= 10:
+            break
+    print("confusing image count " + str(count))
+    plt.show()
 
-     # Start the queue runners.
-     coord = tf.train.Coordinator()
-     try:
-       threads = []
-       for qr in tf.get_collection(tf.GraphKeys.QUEUE_RUNNERS):
-         threads.extend(qr.create_threads(sess, coord=coord, daemon=True,
-                                          start=True))
 
-       num_iter = int(math.ceil(FLAGS.num_examples / FLAGS.batch_size))
-       true_count = 0  # Counts the number of correct predictions.
-       total_sample_count = num_iter * FLAGS.batch_size
-       step = 0
-       while step < num_iter and not coord.should_stop():
-         predictions = sess.run([top_k_op])
-         true_count += np.sum(predictions)
-         step += 1
+def show_misclassified_images(images_used, batch_predictions, labels):
+    correct_predictions = np.equal(np.argmax(batch_predictions, 1), np.argmax(labels, 1))
 
-       # Compute precision @ 1.
-       precision = true_count / total_sample_count
-       print('%s: precision @ 1 = %.3f' % (datetime.now(), precision))
+    fig = plt.figure()
+    fig.suptitle('left: (predict:mono, actual: neutro), right: (predict:neutro, actual: mono)', fontsize=14, fontweight='bold')
+    grid = ImageGrid(fig, 111, nrows_ncols=(5, 2),
+                     axes_pad=0.1,)
+    count_neutro = 0
+    count_mono = 0
+    for i, val in enumerate(correct_predictions):
+        if not val:
+            if labels[i, 1] == 1:  # neutrophile
+                if count_neutro < 5:
+                    grid[(count_neutro*2)+1].imshow(images_used[i])
+                    count_neutro += 1
+            else:
+                if count_mono < 5:
+                    grid[count_mono*2].imshow(images_used[i])
+                    count_mono += 1
+        if count_neutro >= 4 and count_mono >= 4:
+            break
+    #print("mislabelled image count " + str(count_mono+count_neutro))
+    plt.show()
 
-       summary = tf.Summary()
-       summary.ParseFromString(sess.run(summary_op))
-       summary.value.add(tag='Precision @ 1', simple_value=precision)
-       summary_writer.add_summary(summary, global_step)
-     except Exception as e:  # pylint: disable=broad-except
-       coord.request_stop(e)
 
-     coord.request_stop()
-     coord.join(threads, stop_grace_period_secs=10)
+def show_filters(filters):
+    filters = np.rollaxis(filters, 3, 0)
+    fig = plt.figure()
+    fig.suptitle('filters 1st layer', fontsize=14, fontweight='bold')
+    grid = ImageGrid(fig, 111, nrows_ncols=((filters.shape[0]/2)+1, 2),
+                     axes_pad=0.1,)
+    for i in range(filters.shape[0]):
+        filter = filters[i, :, :, 0]
+        grid[i].imshow(filter)
+    print("filter # : " + str(filters.shape[0]))
+    plt.show()
+
+
+def eval_once():
+    pass
 
 
 def evaluate():
-    """Eval CIFAR-10 for a number of steps."""
-    with tf.Graph().as_default() as g:
-        # Get images and labels for CIFAR-10.
-        eval_data = FLAGS.eval_data == 'test'
-        blood = load_data(FLAGS.train_dir, fake_data=False, one_hot=True, dtype=tf.uint8)
+    """Train blood_model for a number of steps."""
+
+    # declare placeholders
+    with tf.name_scope('input'):
+        x = tf.placeholder(tf.float32, shape=[None, 81, 81, 3])
+        y_ = tf.placeholder(tf.float32, shape=[None, 2])
+        tf.image_summary('input', x, 50)
+        keep_prob = tf.placeholder(tf.float32)
+        tf.scalar_summary('dropout_keep_probability', keep_prob)
+
+    # Get images and labels for blood_model.
+    conv_output, W_conv1 = blood_model.inference(x, keep_prob)
+    predictions = blood_model.predictions(conv_output)
+
+    sess = tf.InteractiveSession()
+
+    sess.run(tf.initialize_all_variables())
+
+    saver = tf.train.Saver()
+
+    ckpt = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
+    if ckpt and ckpt.model_checkpoint_path:
+        # Restores from checkpoint
+        saver.restore(sess, ckpt.model_checkpoint_path)
+        # extract global_step from it.
+        global_step = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
+        print("checkpoint found at step %d", global_step)
+    else:
+        print('No checkpoint file found')
+        return
+    # foo = sess.graph.get_tensors()
+    # blah = sess.graph.get_operations()
+    # weights = sess.graph.get_operation_by_name('conv1/Variable')
+    # weights = sess.run(weights)
+    # show_hard_images(batch_val[1], predictions)
+    blood_datasets = blood_model.inputs(eval_data=True)
+
+    filters = sess.run(W_conv1)
+    show_filters(filters)
+
+    batch_val = blood_datasets.validation.next_batch_untouched(FLAGS.batch_size)
+
+    predictions = sess.run(predictions, feed_dict={x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})
 
 
 
-        # Build a Graph that computes the logits predictions from the
-        # inference model.
-        logits = cifar10.inference(images)
+    #show_misclassified_images(batch_val[1], predictions, batch_val[2])
 
-        # Calculate predictions.
-        top_k_op = tf.nn.in_top_k(logits, labels, 1)
 
-        # Restore the moving average version of the learned variables for eval.
-        variable_averages = tf.train.ExponentialMovingAverage(
-        cifar10.MOVING_AVERAGE_DECAY)
-        variables_to_restore = variable_averages.variables_to_restore()
-        saver = tf.train.Saver(variables_to_restore)
+def main(argv=None):
+    evaluate()
 
-        # Build the summary operation based on the TF collection of Summaries.
-        summary_op = tf.merge_all_summaries()
 
-        summary_writer = tf.train.SummaryWriter(FLAGS.eval_dir, g)
-
-        while True:
-            eval_once(saver, summary_writer, top_k_op, summary_op)
-            if FLAGS.run_once:
-                break
-            time.sleep(FLAGS.eval_interval_secs)
+if __name__ == '__main__':
+    tf.app.run()

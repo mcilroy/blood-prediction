@@ -2,6 +2,7 @@ network configuration
     decaying learning rate
     use moving average for prediction
     change variance -> std deviation, need to restart for it to work
+        bug: the model will only work with variance, very strange...
 network
     increase depth of convnet to 7x7 filter output
     weight decay
@@ -14,7 +15,8 @@ distorting inputs
     zooming
 visualize
     visualize images by class
-    visualize filters at each layer
-    visualize output of poorly performing cells
+    -visualize filters at each layer
+    -visualize output of poorly performing cells
 refactor
-    evaluation should be in a separate file
+    -evaluation should be in a separate file
+    change loss function to look like the cifar-10 cross-entropy loss wit logits
