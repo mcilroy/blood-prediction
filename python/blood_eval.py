@@ -84,25 +84,26 @@ def show_misclassified_images(images_used, batch_predictions, labels):
         grid[x].imshow(blank)
     for i, val in enumerate(correct_predictions):
         if not val:  # wrong
+            image = images_used[i]
             if labels[i, 0] == 1:  # neutrophile
                 if count_neutro < 5:
-                    grid[count_neutro*5].imshow(images_used[i])
+                    grid[count_neutro*5].imshow(image)
                     count_neutro += 1
             elif labels[i, 1] == 1:  # mono
                 if count_mono < 5:
-                    grid[(count_mono*5)+1].imshow(images_used[i])
+                    grid[(count_mono*5)+1].imshow(image)
                     count_mono += 1
             elif labels[i, 2] == 1:  # basophil
                 if count_baso < 5:
-                    grid[(count_baso*5)+2].imshow(images_used[i])
+                    grid[(count_baso*5)+2].imshow(image)
                     count_baso += 1
             elif labels[i, 3] == 1:  # eosin
                 if count_eosin < 5:
-                    grid[(count_eosin*5)+3].imshow(images_used[i])
+                    grid[(count_eosin*5)+3].imshow(image)
                     count_eosin += 1
             elif labels[i, 3] == 1:  # lymph
                 if count_lymph < 5:
-                    grid[(count_lymph*5)+4].imshow(images_used[i])
+                    grid[(count_lymph*5)+4].imshow(image)
                     count_lymph += 1
         if count_neutro >= 4 and count_mono >= 4 and count_baso >= 4 and count_eosin >= 4 and count_lymph >= 4:
             break
@@ -204,11 +205,14 @@ def evaluate():
 
     #batch_val = blood_datasets.validation.next_batch_untouched(FLAGS.batch_size)
     #predictions = sess.run(conv_predictions, feed_dict={x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})
+    #show_misclassified_images(batch_val[1], predictions, batch_val[2])
+
     predictions = sess.run(conv_predictions, feed_dict={x: blood_datasets.validation.images, y_: blood_datasets.validation.labels, keep_prob: 1.0})
+    show_misclassified_images(blood_datasets.validation._images_original, predictions, blood_datasets.validation.labels)
 
     print_confusion_matrix(predictions, blood_datasets.validation.labels)
+
     # show_hard_images(batch_val[1], predictions)
-    show_misclassified_images(blood_datasets.validation.images, predictions, blood_datasets.validation.labels)
     # filters = sess.run(W_conv1)
     # show_filters(filters)
     # show_filters_alt(filters)
