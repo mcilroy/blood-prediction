@@ -1,7 +1,7 @@
 network configuration
     decaying learning rate
     use moving average for prediction
-    change variance -> std deviation, need to restart for it to work
+    -change variance -> std deviation, need to restart for it to work
         bug: the model will only work with variance, very strange...
 network
     increase depth of convnet to 7x7 filter output
@@ -11,12 +11,17 @@ network
     -save model periodically
 distorting inputs
     based on color, hue, lighting
-    cropping
+    -cropping
     zooming
 visualize
     visualize images by class
     -visualize filters at each layer
     -visualize output of poorly performing cells
+    -visualize images that respond maximally to each filter
 refactor
     -evaluation should be in a separate file
     change loss function to look like the cifar-10 cross-entropy loss wit logits
+    
+qustions:
+    why is var work but not std dev?
+    how does the network go from 50x81x81x3 convolved with 5x5x3x32 = 50x81x81x32

@@ -1,1 +1,0 @@
-using 1000 monocytes and 1000 neutrophils I achieved a result of 95% accuracy on the remaining unbalanced validation set (100 neu, 800 mono)

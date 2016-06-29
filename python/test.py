@@ -26,4 +26,4 @@ with tf.Session() as sess:
 
 
     #print("w:", w.name)
-    print(sess.run(w))
+    #print(sess.run(w))

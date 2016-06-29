@@ -25,7 +25,7 @@ def inputs(eval_data):
 
 
 def weight_variable(shape, name='generic'):
-    initial = tf.truncated_normal(shape, stddev=0.1)
+    initial = tf.truncated_normal(shape, stddev=0.01)
     return tf.Variable(initial, name)
 
 
@@ -71,20 +71,20 @@ def inference(x, keep_prob):
     h_pool2 = max_pool_2x2(h_conv2)
 
     with tf.variable_scope('local3') as scope:
-        W_fc1 = weight_variable([21 * 21 * 64, 1024], 'weights')
+        W_fc1 = weight_variable([19 * 19 * 64, 1024], 'weights')
         b_fc1 = bias_variable([1024])
-        h_pool2_flat = tf.reshape(h_pool2, [-1, 21*21*64])
+        h_pool2_flat = tf.reshape(h_pool2, [-1, 19*19*64])
         h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1, name=scope.name)
         _activation_summary(h_fc1)
 
     h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
 
     with tf.variable_scope('local4') as scope:
-        W_fc2 = weight_variable([1024, 2], 'weights')
-        b_fc2 = bias_variable([2])
+        W_fc2 = weight_variable([1024, 5], 'weights')
+        b_fc2 = bias_variable([5])
 
     y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc2) + b_fc2)
-    return y_conv, W_conv1
+    return y_conv, W_conv1, W_conv2, h_conv1, h_conv2
 
 
 def loss(y_conv, y_):

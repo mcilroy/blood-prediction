@@ -3,8 +3,9 @@ import blood_model
 import os
 import numpy as np
 
+
 FLAGS = tf.app.flags.FLAGS
-RUN = 'run2'
+RUN = 'all_five_cells'
 tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/blood_train_tmp',
                            """Directory where to write event logs and checkpoint.""")
 tf.app.flags.DEFINE_string('summaries_dir', RUN+'/blood_eval_tmp',
@@ -13,7 +14,7 @@ tf.app.flags.DEFINE_string('max_steps', 20000,
                            """Maximum steps to train the model""")
 tf.app.flags.DEFINE_string('continue_run', False,
                            """Continue from when training stopped?""")
-tf.app.flags.DEFINE_string('batch_size', 50,
+tf.app.flags.DEFINE_string('batch_size', 64,
                            """batch size""")
 
 
@@ -22,8 +23,8 @@ def train():
 
     # declare placeholders
     with tf.name_scope('input'):
-        x = tf.placeholder(tf.float32, shape=[None, 81, 81, 3])
-        y_ = tf.placeholder(tf.float32, shape=[None, 2])
+        x = tf.placeholder(tf.float32, shape=[None, 75, 75, 3])
+        y_ = tf.placeholder(tf.float32, shape=[None, 5])
         tf.image_summary('input', x, 50)
         keep_prob = tf.placeholder(tf.float32)
         tf.scalar_summary('dropout_keep_probability', keep_prob)
@@ -31,7 +32,7 @@ def train():
     # Get images and labels for blood_model.
     blood_datasets = blood_model.inputs(eval_data=False)
     # build the convolution network
-    conv_output, W_conv1 = blood_model.inference(x, keep_prob)
+    conv_output, _, _, _, _ = blood_model.inference(x, keep_prob)
     # Calculate loss.
     loss = blood_model.loss(conv_output, y_)
     accuracy = blood_model.accuracy(conv_output, y_)
@@ -57,7 +58,6 @@ def train():
 
     for step in range(global_step+1, FLAGS.max_steps):
         batch = blood_datasets.train.next_batch(FLAGS.batch_size)
-        #train_op.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
         _, loss_output = sess.run([train_op, loss], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
         assert not np.isnan(loss_output)
         if step % 100 == 0:
@@ -66,7 +66,7 @@ def train():
             train_writer.add_summary(summary, step)
             print("step %d, training accuracy %g" % (step, train_accuracy))
 
-        if (step % 100 == 0 or (step + 1) == FLAGS.max_steps) and not step == 0:
+        if (step % 1000 == 0 or (step + 1) == FLAGS.max_steps) and not step == 0:
             summary_validation, accuracy_validation = sess.run([summary_op, accuracy], feed_dict={
                     x: blood_datasets.validation.images, y_: blood_datasets.validation.labels, keep_prob: 1.0})
             validation_writer.add_summary(summary_validation, step)
