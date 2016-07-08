@@ -25,3 +25,18 @@ refactor
 qustions:
     why is var work but not std dev?
     how does the network go from 50x81x81x3 convolved with 5x5x3x32 = 50x81x81x32
+
+
+handle distorting input on the fly
+    data= load data into numpy array
+    in model graph distort the batch given to the model
+        placeholder = tf.flip,  tf.crop
+    # get a batch from each cell, if cur_i greater than the data then shuffle and start over
+    get_next_batch(cur_i, batch_size)
+        for each cell_type:
+                cell_type[cur_i*batch_size]
+        
+
+        
+
+

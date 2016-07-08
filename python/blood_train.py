@@ -5,17 +5,23 @@ import numpy as np
 
 
 FLAGS = tf.app.flags.FLAGS
-RUN = 'all_five_cells'
+RUN = 'all_five_cells_balanced_paul'
 tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/blood_train_tmp',
                            """Directory where to write event logs and checkpoint.""")
 tf.app.flags.DEFINE_string('summaries_dir', RUN+'/blood_eval_tmp',
                            """Summaries directory""")
 tf.app.flags.DEFINE_string('max_steps', 20000,
                            """Maximum steps to train the model""")
-tf.app.flags.DEFINE_string('continue_run', False,
+tf.app.flags.DEFINE_string('continue_run', True,
                            """Continue from when training stopped?""")
-tf.app.flags.DEFINE_string('batch_size', 64,
+tf.app.flags.DEFINE_string('batch_size', 65,
                            """batch size""")
+
+# Constants describing the training process.
+MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
+NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
+LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
+INITIAL_LEARNING_RATE = 0.1       # Initial learning rate.
 
 
 def train():
@@ -23,16 +29,19 @@ def train():
 
     # declare placeholders
     with tf.name_scope('input'):
-        x = tf.placeholder(tf.float32, shape=[None, 75, 75, 3])
-        y_ = tf.placeholder(tf.float32, shape=[None, 5])
-        tf.image_summary('input', x, 50)
         keep_prob = tf.placeholder(tf.float32)
         tf.scalar_summary('dropout_keep_probability', keep_prob)
-
+        y_ = tf.placeholder(tf.float32, shape=[None, 5])
+        x = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, 81, 81, 3])
+        tf.image_summary('input', x, 10)
     # Get images and labels for blood_model.
     blood_datasets = blood_model.inputs(eval_data=False)
+
+    # randomize the inputs look
+    data = blood_model.prepare_input(x)
+
     # build the convolution network
-    conv_output, _, _, _, _ = blood_model.inference(x, keep_prob)
+    conv_output, _, _, _, _ = blood_model.inference(data, keep_prob)
     # Calculate loss.
     loss = blood_model.loss(conv_output, y_)
     accuracy = blood_model.accuracy(conv_output, y_)
@@ -60,22 +69,24 @@ def train():
         batch = blood_datasets.train.next_batch(FLAGS.batch_size)
         _, loss_output = sess.run([train_op, loss], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
         assert not np.isnan(loss_output)
-        if step % 100 == 0:
+        if step % 400 == 0:
             summary, train_accuracy = sess.run([summary_op, accuracy], feed_dict={
                 x: batch[0], y_: batch[1], keep_prob: 1.0})
             train_writer.add_summary(summary, step)
             print("step %d, training accuracy %g" % (step, train_accuracy))
 
         if (step % 1000 == 0 or (step + 1) == FLAGS.max_steps) and not step == 0:
+            batch = blood_datasets.validation.next_batch(FLAGS.batch_size)
             summary_validation, accuracy_validation = sess.run([summary_op, accuracy], feed_dict={
-                    x: blood_datasets.validation.images, y_: blood_datasets.validation.labels, keep_prob: 1.0})
+                    x: batch[0], y_: batch[1], keep_prob: 1.0})
             validation_writer.add_summary(summary_validation, step)
             print("validation accuracy %g" % accuracy_validation)
 
-            summary_test, accuracy_test = sess.run([summary_op, accuracy], feed_dict={
-                    x: blood_datasets.testing.images, y_: blood_datasets.testing.labels, keep_prob: 1.0})
-            test_writer.add_summary(summary_test, step)
-            print("test accuracy %g" % accuracy_test)
+            # batch = blood_datasets.testing.next_batch(FLAGS.batch_size)
+            # summary_test, accuracy_test = sess.run([summary_op, accuracy], feed_dict={
+            #         x: batch[0], y_: batch[1], keep_prob: 1.0})
+            # test_writer.add_summary(summary_test, step)
+            # print("test accuracy %g" % accuracy_test)
 
             # save checkpoint
             checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')

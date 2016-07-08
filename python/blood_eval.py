@@ -5,10 +5,10 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 import numpy as np
 
 FLAGS = tf.app.flags.FLAGS
-RUN = 'all_five_cells'
+RUN = 'all_five_cells_balanced_paul'
 tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/blood_train_tmp',
                            """Directory where to read model checkpoints.""")
-tf.app.flags.DEFINE_string('batch_size', 64,
+tf.app.flags.DEFINE_string('batch_size', 65,
                            """batch size""")
 
 
@@ -84,7 +84,7 @@ def show_misclassified_images(images_used, batch_predictions, labels):
         grid[x].imshow(blank)
     for i, val in enumerate(correct_predictions):
         if not val:  # wrong
-            image = images_used[i]
+            image = np.array(images_used[i], dtype='uint8')
             if labels[i, 0] == 1:  # neutrophile
                 if count_neutro < 5:
                     grid[count_neutro*5].imshow(image)
@@ -101,7 +101,7 @@ def show_misclassified_images(images_used, batch_predictions, labels):
                 if count_eosin < 5:
                     grid[(count_eosin*5)+3].imshow(image)
                     count_eosin += 1
-            elif labels[i, 3] == 1:  # lymph
+            elif labels[i, 4] == 1:  # lymph
                 if count_lymph < 5:
                     grid[(count_lymph*5)+4].imshow(image)
                     count_lymph += 1
@@ -174,14 +174,16 @@ def evaluate():
 
     # declare placeholders
     with tf.name_scope('input'):
-        x = tf.placeholder(tf.float32, shape=[None, 75, 75, 3])
+        x = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, 81, 81, 3])
         y_ = tf.placeholder(tf.float32, shape=[None, 5])
         tf.image_summary('input', x, 25)
         keep_prob = tf.placeholder(tf.float32)
         tf.scalar_summary('dropout_keep_probability', keep_prob)
 
+    # randomize the inputs look
+    data = blood_model.prepare_input(x)
     # Get images and labels for blood_model.
-    conv_output, W_conv1, W_conv2, h_conv1, h_conv2 = blood_model.inference(x, keep_prob)
+    conv_output, W_conv1, W_conv2, h_conv1, h_conv2 = blood_model.inference(data, keep_prob)
     conv_predictions = blood_model.predictions(conv_output)
 
     sess = tf.InteractiveSession()
@@ -203,14 +205,14 @@ def evaluate():
 
     blood_datasets = blood_model.inputs(eval_data=True)
 
-    #batch_val = blood_datasets.validation.next_batch_untouched(FLAGS.batch_size)
-    #predictions = sess.run(conv_predictions, feed_dict={x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})
-    #show_misclassified_images(batch_val[1], predictions, batch_val[2])
+    batch_val = blood_datasets.validation.next_batch_untouched(FLAGS.batch_size)
+    predictions = sess.run(conv_predictions, feed_dict={x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})
+    print_confusion_matrix(predictions, batch_val[2])
+    show_misclassified_images(batch_val[1], predictions, batch_val[2])
 
-    predictions = sess.run(conv_predictions, feed_dict={x: blood_datasets.validation.images, y_: blood_datasets.validation.labels, keep_prob: 1.0})
-    show_misclassified_images(blood_datasets.validation._images_original, predictions, blood_datasets.validation.labels)
-
-    print_confusion_matrix(predictions, blood_datasets.validation.labels)
+    #predictions = sess.run(conv_predictions, feed_dict={x: blood_datasets.validation.images, y_: blood_datasets.validation.labels, keep_prob: 1.0})
+    #print_confusion_matrix(predictions, blood_datasets.validation.labels)
+    #show_misclassified_images(blood_datasets.validation._images_original, predictions, blood_datasets.validation.labels)
 
     # show_hard_images(batch_val[1], predictions)
     # filters = sess.run(W_conv1)

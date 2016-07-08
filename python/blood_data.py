@@ -3,6 +3,8 @@ import tensorflow as tf
 import os
 
 DATA_LOCATION = '../../labeller/data'
+FILE_LOCATION = 'pc9_collages_cleaned_paul.npz'
+cell_names = ['neutrophils', 'monocytes', 'basophils', 'eosinophils', 'lymphocytes']
 
 
 def dense_to_one_hot(labels_dense, num_classes):
@@ -50,13 +52,13 @@ def distort(examples):
     float_image = tf.image.per_image_whitening(distorted_image)
 
     with tf.Session() as sess:
-        distorted_images = np.zeros((examples.shape[0]*10, 75, 75, examples.shape[3]))
+        distorted_images = np.zeros((examples.shape[0]*2, 75, 75, examples.shape[3]))
         for i in xrange(len(examples)):
             image = examples[i, :, :, :]
-            for j in xrange(10):
+            for j in xrange(2):
                 reshaped_image = sess.run([float_image], feed_dict={x: image})
                 numpyarray = np.array(reshaped_image[0])  # list of [1, 75, 75, 3]
-                distorted_images[(i*10)+j, :, :, :] = numpyarray
+                distorted_images[(i*2)+j, :, :, :] = numpyarray
     return distorted_images
 
 
@@ -97,11 +99,11 @@ def concatenate_data(data_examples, method, start, end, length, whitening, train
         lymphocytes = method(data_examples['lymphocytes'][start:end], whitening)
     validation_images = np.concatenate((neutrophils, monocytes, basophils, eosinophils, lymphocytes))
     if training:
-        validation_labels = np.concatenate((np.full((neutrophils, 1), 0, dtype=int),
-                                        np.full((monocytes, 1), 1, dtype=int),
-                                        np.full((basophils, 1), 2, dtype=int),
-                                        np.full((eosinophils, 1), 3, dtype=int),
-                                        np.full((lymphocytes, 1), 4, dtype=int)))
+        validation_labels = np.concatenate((np.full((neutrophils.shape[0], 1), 0, dtype=int),
+                                        np.full((monocytes.shape[0], 1), 1, dtype=int),
+                                        np.full((basophils.shape[0], 1), 2, dtype=int),
+                                        np.full((eosinophils.shape[0], 1), 3, dtype=int),
+                                        np.full((lymphocytes.shape[0], 1), 4, dtype=int)))
     else:
         validation_labels = np.concatenate((np.full((length, 1), 0, dtype=int),
                                         np.full((length, 1), 1, dtype=int),
@@ -110,6 +112,50 @@ def concatenate_data(data_examples, method, start, end, length, whitening, train
                                         np.full((length, 1), 4, dtype=int)))
     validation_labels = to_categorical(validation_labels, 5)
     return validation_images, validation_labels
+
+
+def inputs_balanced(fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
+    class DataSets(object):
+            pass
+    data_sets = DataSets()
+    if fake_data:
+        def fake():
+            return DataSet([], [], fake_data=True, one_hot=one_hot, dtype=dtype)
+        data_sets.train = fake()
+        data_sets.validation = fake()
+        data_sets.test = fake()
+        return data_sets
+    VALIDATION_SIZE = 18
+    TESTING_SIZE = 1
+    data_examples = np.load(os.path.join(DATA_LOCATION, FILE_LOCATION))
+    for name in cell_names:
+        print(name+":"+str(data_examples[name].shape[0]))
+    testing = dict()
+    validation = dict()
+    training = dict()
+    validation_labels = dict()
+    testing_labels = dict()
+    training_labels = dict()
+
+    for i, name in enumerate(cell_names):
+        # Shuffle the data
+        perm = np.arange(data_examples[name].shape[0])
+        np.random.shuffle(perm)
+        randomized_data = data_examples[name][perm]
+        validation[name] = randomized_data[:VALIDATION_SIZE]
+        testing[name] = randomized_data[VALIDATION_SIZE:VALIDATION_SIZE+TESTING_SIZE]
+        training[name] = randomized_data[VALIDATION_SIZE+TESTING_SIZE:]
+        validation_labels[name] = to_categorical(np.full((validation[name].shape[0], 1), i, dtype=int), 5)
+        testing_labels[name] = to_categorical(np.full((testing[name].shape[0], 1), i, dtype=int), 5)
+        training_labels[name] = to_categorical(np.full((training[name].shape[0], 1), i, dtype=int), 5)
+    data_sets.validation = DataSetBalanced(validation, validation_labels, fake_data=False, one_hot=True,
+                                       dtype=tf.uint8, eval_data=eval_data)
+    data_sets.testing = DataSetBalanced(testing, testing_labels, fake_data=False, one_hot=True,
+                                       dtype=tf.uint8, eval_data=eval_data)
+    data_sets.train = DataSetBalanced(training, training_labels, fake_data=False, one_hot=True,
+                                       dtype=tf.uint8, eval_data=eval_data)
+
+    return data_sets
 
 
 def inputs(fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
@@ -133,10 +179,19 @@ def inputs(fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
         data_sets.test = fake()
         return data_sets
 
-    VALIDATION_SIZE = 5
-    TESTING_SIZE = 2
-    data_examples = np.load(os.path.join(DATA_LOCATION, 'pc9_collages_cleaned.npz'))
-
+    VALIDATION_SIZE = 18
+    TESTING_SIZE = 1
+    data_examples = np.load(os.path.join(DATA_LOCATION, FILE_LOCATION))
+    print(data_examples['neutrophils'].shape[0])
+    print(data_examples['monocytes'].shape[0])
+    print(data_examples['basophils'].shape[0])
+    print(data_examples['eosinophils'].shape[0])
+    print(data_examples['lymphocytes'].shape[0])
+    # 3451
+    # 581
+    # 34
+    # 258
+    # 1136
     # if not eval:
     #   make val, test with images undistorted method (with whitening)
     #   train with distorted method
@@ -148,7 +203,7 @@ def inputs(fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
     #   do val, test originals with undistorted method (without whitening)
     #   pass original data in dataset method
 
-    if eval:
+    if eval_data:
         validation_images, validation_labels = concatenate_data(data_examples=data_examples, method=undistorted,
                                                                 start=0, end=VALIDATION_SIZE, length=VALIDATION_SIZE,
                                                                 whitening=True, training=False)
@@ -181,7 +236,7 @@ def inputs(fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
                                        dtype=tf.uint8, eval_data=eval_data)
         data_sets.testing = DataSet(testing_images, testing_labels, fake_data=False, one_hot=True, dtype=tf.uint8,
                                     eval_data=eval_data)
-        data_sets.training = DataSet(training_images, training_labels, fake_data=False, one_hot=True, dtype=tf.uint8,
+        data_sets.train = DataSet(training_images, training_labels, fake_data=False, one_hot=True, dtype=tf.uint8,
                                      eval_data=eval_data)
     return data_sets
 
@@ -232,6 +287,124 @@ def inputs_neutro_mono_only(fake_data=False, one_hot=False, dtype=tf.float32, ev
     return data_sets
 
 
+class DataSetBalanced(object):
+    def __init__(self, images, labels, fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False):
+        """Construct a DataSet. one_hot arg is used only if fake_data is true.  `dtype` can be either `uint8` to leave
+         the input as `[0, 255]`, or `float32` to rescale into `[0, 1]`. """
+        dtype = tf.as_dtype(dtype).base_dtype
+        if dtype not in (tf.uint8, tf.float32):
+            raise TypeError('Invalid image dtype %r, expected uint8 or float32' % dtype)
+        if fake_data:
+            self._num_examples = 10000
+            self.one_hot = one_hot
+        else:
+            for name in cell_names:
+                assert images[name].shape[0] == labels[name].shape[0], ('images.shape: %s labels.shape: %s' % (images.shape, labels.shape))
+            self._num_examples = 0
+            for name in cell_names:
+                self._num_examples += images[name].shape[0]
+                assert images[name].shape[3] == 3
+            if dtype == tf.float32:
+                # Convert from [0, 255] -> [0.0, 1.0].
+                for key in images:
+                    images[key] = images[key].astype(np.float32)
+                    images[key] = np.multiply(images[key], 1.0 / 255.0)
+        self._images = images
+        self._labels = labels
+        self._epochs_completed = dict()
+        self._index_in_epoch = dict()
+        for name in cell_names:
+            self._epochs_completed[name] = 0
+            self._index_in_epoch[name] = 0
+            # Shuffle the data
+            perm = np.arange(images[name].shape[0])
+            np.random.shuffle(perm)
+            images[name] = images[name][perm]
+            labels[name] = labels[name][perm]
+        self._eval_data = eval_data
+        if self._eval_data:
+            self._images_original = dict()
+            for name in cell_names:
+                self._images_original[name] = np.copy(self._images[name])
+
+    def get_batch(self, per_name_size):
+        """Return the next 'batch_size' examples from this data set."""
+        start = dict()
+        end = dict()
+        for name in cell_names:
+            start[name] = self._index_in_epoch[name]
+            self._index_in_epoch[name] += per_name_size
+            if self._index_in_epoch[name] > self._images[name].shape[0]:
+                # Finished epoch
+                self._epochs_completed[name] += 1
+                # Shuffle the data
+                perm = np.arange(self._images[name].shape[0])
+                np.random.shuffle(perm)
+                self._images[name] = self._images[name][perm]
+                self._labels[name] = self._labels[name][perm]
+                # Start next epoch
+                start[name] = 0
+                self._index_in_epoch[name] = per_name_size
+                assert per_name_size <= self._images[name].shape[0]
+            end[name] = self._index_in_epoch[name]
+        return start, end
+
+    def next_batch(self, batch_size):
+        assert self._eval_data is False
+        per_name_size = batch_size/len(cell_names)
+        start, end = self.get_batch(per_name_size)
+        batch = np.empty((batch_size, self._images[cell_names[0]].shape[1],
+                          self._images[cell_names[0]].shape[2], self._images[cell_names[0]].shape[3]))
+        batch_labels = np.empty((batch_size, 5))
+
+        for i, name in enumerate(cell_names):
+            batch[per_name_size*i:per_name_size*(i+1)] = self._images[name][start[name]:end[name]]
+            batch_labels[per_name_size*i:per_name_size*(i+1)] = self._labels[name][start[name]:end[name]]
+        return batch, batch_labels
+
+    def next_batch_untouched(self, batch_size):
+        assert self._eval_data is True
+        per_name_size = batch_size/len(cell_names)
+        start, end = self.get_batch(per_name_size)
+        batch = np.empty((batch_size, self._images[cell_names[0]].shape[1],
+                          self._images[cell_names[0]].shape[2], self._images[cell_names[0]].shape[3]))
+        batch_labels = np.empty((batch_size, 5))
+        per_name_size = batch_size/len(cell_names)
+        batch_original = np.empty((batch_size, self._images[cell_names[0]].shape[1],
+                          self._images[cell_names[0]].shape[2], self._images[cell_names[0]].shape[3]))
+        for i, name in enumerate(cell_names):
+            batch[per_name_size*i:per_name_size*(i+1)] = self._images[name][start[name]:end[name]]
+            batch_labels[per_name_size*i:per_name_size*(i+1)] = self._labels[name][start[name]:end[name]]
+            batch_original[per_name_size*i:per_name_size*(i+1)] = self._images_original[name][start[name]:end[name]]
+        return batch,  batch_original, batch_labels
+
+    def get_all(self):
+        all = np.empty((self._num_examples, self._images[cell_names[0]].shape[1], self._images[cell_names[0]].shape[2],
+                        self._images[cell_names[0]].shape[3]))
+        all_labels = np.empty((self._num_examples, 5))
+        start = 0
+        end = self._images[cell_names[0]].shape[0]
+        #print("num examples "+str(self._num_examples))
+        #print("all shape "+str(all.shape))
+        for i, name in enumerate(cell_names):
+            #print("start:"+str(start)+" end"+str(end))
+            #print("images shape: "+str(self._images[name].shape))
+            all[start:end] = self._images[name]
+            all_labels[start:end] = self._labels[name]
+            start = end
+            if i+1 < len(cell_names):
+                end += self._images[cell_names[i+1]].shape[0]
+        return all, all_labels
+
+    @property
+    def images(self):
+        return self._images
+
+    @property
+    def labels(self):
+        return self._labels
+
+
 class DataSet(object):
     def __init__(self, images, labels, fake_data=False, one_hot=False, dtype=tf.float32, eval_data=False, original_images=None):
         """Construct a DataSet. one_hot arg is used only if fake_data is true.  `dtype` can be either `uint8` to leave
@@ -257,7 +430,6 @@ class DataSet(object):
         self._labels = labels
         self._epochs_completed = 0
         self._index_in_epoch = 0
-        self.num_examples = len(self._images)
         # Shuffle the data
         perm = np.arange(self._num_examples)
         np.random.shuffle(perm)
