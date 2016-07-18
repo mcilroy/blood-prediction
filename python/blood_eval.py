@@ -5,11 +5,9 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 import numpy as np
 
 FLAGS = tf.app.flags.FLAGS
-RUN = 'all_five_cells_balanced_paul'
-tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/blood_train_tmp',
-                           """Directory where to read model checkpoints.""")
-tf.app.flags.DEFINE_string('batch_size', 65,
-                           """batch size""")
+RUN = 'all_five_cells_balanced_paul_sameseed'
+tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/checkpoints', """Directory where to read model checkpoints.""")
+#tf.app.flags.DEFINE_string('batch_size', 90, """batch size""")
 
 
 def show_hard_images(images_used, batch_predictions):
@@ -29,31 +27,6 @@ def show_hard_images(images_used, batch_predictions):
     plt.show()
 
 
-# def show_misclassified_images(images_used, batch_predictions, labels):
-#     correct_predictions = np.equal(np.argmax(batch_predictions, 1), np.argmax(labels, 1))
-#
-#     fig = plt.figure()
-#     fig.suptitle('left: (predict:mono, actual: neutro), right: (predict:neutro, actual: mono)', fontsize=14, fontweight='bold')
-#     grid = ImageGrid(fig, 111, nrows_ncols=(5, 2),
-#                      axes_pad=0.1,)
-#     count_neutro = 0
-#     count_mono = 0
-#     for i, val in enumerate(correct_predictions):
-#         if not val:
-#             if labels[i, 1] == 1:  # neutrophile
-#                 if count_neutro < 5:
-#                     grid[(count_neutro*2)+1].imshow(images_used[i])
-#                     count_neutro += 1
-#             else:
-#                 if count_mono < 5:
-#                     grid[count_mono*2].imshow(images_used[i])
-#                     count_mono += 1
-#         if count_neutro >= 4 and count_mono >= 4:
-#             break
-#     #print("mislabelled image count " + str(count_mono+count_neutro))
-#     plt.show()
-
-
 def print_confusion_matrix(batch_predictions, labels):
     """           actual
     #   predict 1 0 0 0 0
@@ -65,6 +38,51 @@ def print_confusion_matrix(batch_predictions, labels):
     for x in xrange(batch_predictions.shape[0]):
         matrix[pred[x], lab[x]] += 1
     print(matrix)
+    correct_predictions = np.equal(pred, lab)
+    tmp_accuracy = np.mean(correct_predictions)
+    print("accuracy: " + str(tmp_accuracy))
+
+
+def show_all_misclassified_images(images_used, batch_predictions, labels):
+    correct_predictions = np.equal(np.argmax(batch_predictions, 1), np.argmax(labels, 1))
+    'actual: N, pred: M image1, image 2'
+    'actual: N, pred: B image3'
+    'actual: M, pred: N image4 image5'
+    errors = [[[] for i in range(5)] for i in range(5)]
+    for i, val in enumerate(correct_predictions):
+        if not val:  # wrong
+            ac = np.argmax(labels[i])
+            pr = np.argmax(batch_predictions[i])
+            errors[ac][pr].append(np.array(images_used[i], dtype='uint8'))
+
+    #cell_names = ['neutrophils', 'monocytes', 'basophils', 'eosinophils', 'lymphocytes']
+    cell_names = ['Ne', 'Mo', 'Ba', 'Eo', 'Ly']
+    cols = []
+    cols_images = []
+    row_lens = []
+    for i, actual in enumerate(errors):
+        for j, pred in enumerate(actual):
+            if pred != []:
+                cols.append('Actual: '+cell_names[i]+", Pred: "+cell_names[j])
+                cols_images.append(pred)
+                row_lens.append(len(errors[i][j]))
+    fig = plt.figure()
+    grid = ImageGrid(fig, 111, nrows_ncols=(max(row_lens), len(cols)), axes_pad=0.1,)
+
+    blank = np.zeros((75, 75, 3))
+    for x in xrange(max(row_lens)*len(cols)):
+        grid[x].imshow(blank)
+    for i, col in enumerate(cols):
+        for j, image in enumerate(cols_images[i]):
+            grid[(len(cols)*j)+i].imshow(image)
+
+    pad = 5  # in points
+    for ax, col in zip(grid.axes_all, cols):
+        ax.annotate(col, xy=(0.5, 1), xytext=(0, pad), xycoords='axes fraction', textcoords='offset points', size='large',
+                    ha='center', va='baseline')
+    fig.tight_layout()
+    fig.subplots_adjust(left=0.15, top=0.95)
+    plt.show()
 
 
 def show_misclassified_images(images_used, batch_predictions, labels):
@@ -171,17 +189,10 @@ def eval_once():
 
 def evaluate():
     """Train blood_model for a number of steps."""
-
-    # declare placeholders
-    with tf.name_scope('input'):
-        x = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, 81, 81, 3])
-        y_ = tf.placeholder(tf.float32, shape=[None, 5])
-        tf.image_summary('input', x, 25)
-        keep_prob = tf.placeholder(tf.float32)
-        tf.scalar_summary('dropout_keep_probability', keep_prob)
+    global_step = tf.Variable(0, name='global_step', trainable=False)
 
     # randomize the inputs look
-    data = blood_model.prepare_input(x)
+    x, y_, data, keep_prob = blood_model.prepare_input()
     # Get images and labels for blood_model.
     conv_output, W_conv1, W_conv2, h_conv1, h_conv2 = blood_model.inference(data, keep_prob)
     conv_predictions = blood_model.predictions(conv_output)
@@ -205,10 +216,10 @@ def evaluate():
 
     blood_datasets = blood_model.inputs(eval_data=True)
 
-    batch_val = blood_datasets.validation.next_batch_untouched(FLAGS.batch_size)
+    batch_val = blood_datasets.validation.next_batch_untouched()
     predictions = sess.run(conv_predictions, feed_dict={x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})
     print_confusion_matrix(predictions, batch_val[2])
-    show_misclassified_images(batch_val[1], predictions, batch_val[2])
+    show_all_misclassified_images(batch_val[1], predictions, batch_val[2])
 
     #predictions = sess.run(conv_predictions, feed_dict={x: blood_datasets.validation.images, y_: blood_datasets.validation.labels, keep_prob: 1.0})
     #print_confusion_matrix(predictions, blood_datasets.validation.labels)

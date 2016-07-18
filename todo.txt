@@ -37,6 +37,43 @@ handle distorting input on the fly
                 cell_type[cur_i*batch_size]
         
 
-        
+       
+outdated:
+('neutro', 8521, 'mono', 1162, 'baso', 86, 'eosin', 643, 'lympho', 2959)
+total:
+neutrophils:8573
+monocytes:1252
+basophils:83
+eosinophils:515
+lymphocytes:2844
+validation
+neutrophils:18
+monocytes:18
+basophils:18
+eosinophils:18
+lymphocytes:18
+test
+neutrophils:1
+monocytes:1
+basophils:1
+eosinophils:1
+lymphocytes:1
+train
+neutrophils:8554
+monocytes:1233
+basophils:64
+eosinophils:496
+lymphocytes:2825
+
+pc9_collages.npz + venous_vs_capillary.npz
+('neutro', 11549, 'mono', 1582, 'baso', 114, 'eosin', 633, 'lympho', 4858, 'strange_eosin', 798, 'no_cells', 406)
+total: 19940
 
 
+
+results to make
+predicted cells grid for neutrophils and monocytes
+superres image with highlights of each cell
+accuracy, confusion matrix
+training curve
+R-squared plot from the supervised network
