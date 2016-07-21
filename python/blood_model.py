@@ -3,13 +3,14 @@ import blood_data
 import re
 TOWER_NAME = 'tower'
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = blood_data.NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN
+NUM_CLASSES = blood_data.NUM_CLASSES
 # Constants describing the training process.
 MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
 NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
 LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
 INITIAL_LEARNING_RATE = 0.1       # Initial learning rate.
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string('batch_size', 102, """batch size""")  # model uses 65, evaluation uses 90
+tf.app.flags.DEFINE_string('batch_size', 70, """batch size""")  # model uses 65, evaluation uses 90, pred. used 102
 
 
 def _activation_summary(x):
@@ -37,7 +38,7 @@ def prepare_input():
     with tf.name_scope('input'):
         x = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, 81, 81, 3])
         tf.image_summary('input', x, 10)
-        y_ = tf.placeholder(tf.float32, shape=[None, 5])
+        y_ = tf.placeholder(tf.float32, shape=[None, NUM_CLASSES])
         keep_prob = tf.placeholder(tf.float32)
         tf.scalar_summary('dropout_keep_probability', keep_prob)
 
@@ -142,8 +143,8 @@ def inference_heavy(x, keep_prob):
     h_fc2_drop = tf.nn.dropout(h_fc2, keep_prob)
 
     with tf.variable_scope('softmax6') as scope:
-        W_fc3 = weight_variable([1024, 5], 'weights', wd=0.004)
-        b_fc3 = bias_variable([5])
+        W_fc3 = weight_variable([1024, NUM_CLASSES], 'weights', wd=0.004)
+        b_fc3 = bias_variable([NUM_CLASSES])
         y_conv = tf.nn.softmax(tf.matmul(h_fc2_drop, W_fc3) + b_fc3)
     return y_conv, W_conv1, W_conv2, h_conv1, h_conv2
 
@@ -175,8 +176,8 @@ def inference(x, keep_prob):
     h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
 
     with tf.variable_scope('softmax6') as scope:
-        W_fc3 = weight_variable([1024, 5], 'weights', wd=0.004)
-        b_fc3 = bias_variable([5])
+        W_fc3 = weight_variable([1024, NUM_CLASSES], 'weights', wd=0.004)
+        b_fc3 = bias_variable([NUM_CLASSES])
         y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc3) + b_fc3)
     return y_conv, W_conv1, W_conv2, h_conv1, h_conv2
 

@@ -2,9 +2,13 @@ import numpy as np
 import tensorflow as tf
 import os
 
-DATA_LOCATION = '../../labeller/data'
-FILE_LOCATION = 'pc9_collages_cleaned_paul.npz'
-cell_names = ['neutrophils', 'monocytes', 'basophils', 'eosinophils', 'lymphocytes']
+DATA_LOCATION = '../../labeller/data/labelled_data'
+FILE_LOCATION = 'pc9_with_vvc_7classes_training.npz'
+VALIDATION_FILE_LOCATION = 'pc9_with_vvc_7classes_validation.npz'
+TESTING_FILE_LOCATION = ''
+cell_names = ['neutrophils', 'monocytes', 'basophils', 'eosinophils', 'lymphocytes', 'strange_eosinophils', 'no_cells']
+NUM_CLASSES = len(cell_names)
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 11549
 
 
 def to_categorical(y, nb_classes):
@@ -35,7 +39,7 @@ def inputs_balanced(batch_size, fake_data=False, one_hot=False, dtype=tf.float32
         data_sets.validation = fake()
         data_sets.test = fake()
         return data_sets
-    VALIDATION_SIZE = 18
+    VALIDATION_SIZE = 20
     TESTING_SIZE = 1
     data_examples = np.load(os.path.join(DATA_LOCATION, FILE_LOCATION))
     for name in cell_names:
@@ -56,16 +60,19 @@ def inputs_balanced(batch_size, fake_data=False, one_hot=False, dtype=tf.float32
         randomized_data = data_examples[name][perm]
         validation[name] = randomized_data[:VALIDATION_SIZE]
         testing[name] = randomized_data[VALIDATION_SIZE:VALIDATION_SIZE+TESTING_SIZE]
-        training[name] = randomized_data[VALIDATION_SIZE+TESTING_SIZE:]
-        validation_labels[name] = to_categorical(np.full((validation[name].shape[0], 1), i, dtype=int), 5)
-        testing_labels[name] = to_categorical(np.full((testing[name].shape[0], 1), i, dtype=int), 5)
-        training_labels[name] = to_categorical(np.full((training[name].shape[0], 1), i, dtype=int), 5)
+        if not eval_data:
+            training[name] = randomized_data[VALIDATION_SIZE+TESTING_SIZE:]
+            training_labels[name] = to_categorical(np.full((training[name].shape[0], 1), i, dtype=int), NUM_CLASSES)
+        validation_labels[name] = to_categorical(np.full((validation[name].shape[0], 1), i, dtype=int), NUM_CLASSES)
+        testing_labels[name] = to_categorical(np.full((testing[name].shape[0], 1), i, dtype=int), NUM_CLASSES)
+
     data_sets.validation = DataSetBalanced(validation, validation_labels, batch_size, fake_data=False, one_hot=True,
-                                       dtype=tf.uint8, eval_data=eval_data)
+                                           dtype=tf.uint8, eval_data=eval_data)
     data_sets.testing = DataSetBalanced(testing, testing_labels, batch_size, fake_data=False, one_hot=True,
-                                       dtype=tf.uint8, eval_data=eval_data)
-    data_sets.train = DataSetBalanced(training, training_labels, batch_size, fake_data=False, one_hot=True,
-                                       dtype=tf.uint8, eval_data=eval_data)
+                                        dtype=tf.uint8, eval_data=eval_data)
+    if not eval_data:
+        data_sets.train = DataSetBalanced(training, training_labels, batch_size, fake_data=False, one_hot=True,
+                                          dtype=tf.uint8, eval_data=eval_data)
 
     return data_sets
 
@@ -140,7 +147,7 @@ class DataSetBalanced(object):
         start, end = self.get_batch(per_name_size)
         batch = np.empty((self.batch_size, self._images[cell_names[0]].shape[1],
                           self._images[cell_names[0]].shape[2], self._images[cell_names[0]].shape[3]))
-        batch_labels = np.empty((self.batch_size, 5))
+        batch_labels = np.empty((self.batch_size, NUM_CLASSES))
 
         for i, name in enumerate(cell_names):
             batch[per_name_size*i:per_name_size*(i+1)] = self._images[name][start[name]:end[name]]
@@ -153,7 +160,7 @@ class DataSetBalanced(object):
         start, end = self.get_batch(per_name_size)
         batch = np.empty((self.batch_size, self._images[cell_names[0]].shape[1],
                           self._images[cell_names[0]].shape[2], self._images[cell_names[0]].shape[3]))
-        batch_labels = np.empty((self.batch_size, 5))
+        batch_labels = np.empty((self.batch_size, NUM_CLASSES))
         per_name_size = self.batch_size/len(cell_names)
         batch_original = np.empty((self.batch_size, self._images[cell_names[0]].shape[1],
                           self._images[cell_names[0]].shape[2], self._images[cell_names[0]].shape[3]))
@@ -166,7 +173,7 @@ class DataSetBalanced(object):
     def get_all(self):
         all = np.empty((self._num_examples, self._images[cell_names[0]].shape[1], self._images[cell_names[0]].shape[2],
                         self._images[cell_names[0]].shape[3]))
-        all_labels = np.empty((self._num_examples, 5))
+        all_labels = np.empty((self._num_examples, NUM_CLASSES))
         start = 0
         end = self._images[cell_names[0]].shape[0]
         #print("num examples "+str(self._num_examples))

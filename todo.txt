@@ -77,3 +77,10 @@ superres image with highlights of each cell
 accuracy, confusion matrix
 training curve
 R-squared plot from the supervised network
+
+
+
+1) a large network that doesn't take into account the new data, then test on it
+2) a large network that samples x amount from each class from BOTH datasets with x being proportional to the percentage of the class in the data
+3) predict each patient from the new dataset, calculate the totals for each class from the predictions, then plot that with the coulter counter and display the values.
+

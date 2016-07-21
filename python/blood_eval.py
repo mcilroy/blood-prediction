@@ -3,11 +3,13 @@ import blood_model
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import numpy as np
+import blood_data
 
 FLAGS = tf.app.flags.FLAGS
-RUN = 'all_five_cells_balanced_paul_sameseed'
+RUN = 'pc9_with_vvc_7classes'
 tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/checkpoints', """Directory where to read model checkpoints.""")
 #tf.app.flags.DEFINE_string('batch_size', 90, """batch size""")
+NUM_CLASSES = blood_data.NUM_CLASSES
 
 
 def show_hard_images(images_used, batch_predictions):
@@ -34,7 +36,7 @@ def print_confusion_matrix(batch_predictions, labels):
     """
     pred = np.argmax(batch_predictions, 1)
     lab = np.argmax(labels, 1)
-    matrix = np.zeros((5, 5))
+    matrix = np.zeros((NUM_CLASSES, NUM_CLASSES))
     for x in xrange(batch_predictions.shape[0]):
         matrix[pred[x], lab[x]] += 1
     print(matrix)
@@ -48,7 +50,7 @@ def show_all_misclassified_images(images_used, batch_predictions, labels):
     'actual: N, pred: M image1, image 2'
     'actual: N, pred: B image3'
     'actual: M, pred: N image4 image5'
-    errors = [[[] for i in range(5)] for i in range(5)]
+    errors = [[[] for i in range(NUM_CLASSES)] for i in range(NUM_CLASSES)]
     for i, val in enumerate(correct_predictions):
         if not val:  # wrong
             ac = np.argmax(labels[i])
@@ -56,7 +58,7 @@ def show_all_misclassified_images(images_used, batch_predictions, labels):
             errors[ac][pr].append(np.array(images_used[i], dtype='uint8'))
 
     #cell_names = ['neutrophils', 'monocytes', 'basophils', 'eosinophils', 'lymphocytes']
-    cell_names = ['Ne', 'Mo', 'Ba', 'Eo', 'Ly']
+    cell_names = ['Ne', 'Mo', 'Ba', 'Eo', 'Ly', 'str eosin', 'no cell']
     cols = []
     cols_images = []
     row_lens = []

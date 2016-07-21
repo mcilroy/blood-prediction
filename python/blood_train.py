@@ -5,7 +5,7 @@ import numpy as np
 
 
 FLAGS = tf.app.flags.FLAGS
-RUN = 'all_five_cells_balanced_paul_sameseed'
+RUN = 'pc9_with_vvc_7classes_split'
 tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/checkpoints',
                            """Directory where to write event logs and checkpoint.""")
 tf.app.flags.DEFINE_string('summaries_dir', RUN+'/summaries',
