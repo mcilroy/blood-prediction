@@ -10,7 +10,7 @@ NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
 LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
 INITIAL_LEARNING_RATE = 0.1       # Initial learning rate.
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string('batch_size', 70, """batch size""")  # model uses 65, evaluation uses 90, pred. used 102
+tf.app.flags.DEFINE_string('batch_size', 1, """batch size""")  # model uses 65, evaluation uses 90, pred. used 102
 
 
 def _activation_summary(x):
@@ -30,10 +30,16 @@ def _activation_summary(x):
 
 
 def inputs(eval_data):
+    """
+    return balanced set of cell input
+    """
     return blood_data.inputs_balanced(batch_size=FLAGS.batch_size, fake_data=False, one_hot=True, dtype=tf.uint8, eval_data=eval_data)
 
 
 def prepare_input():
+    """
+    distort images by cropping flipping and whitening image, return images and labels
+    """
     # declare placeholders
     with tf.name_scope('input'):
         x = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, 81, 81, 3])
@@ -65,6 +71,7 @@ def prepare_input():
 
 
 def weight_variable(shape, name='generic', wd=None):
+    """ create weight variable of specific 'shape', use weight decay """
     initial = tf.truncated_normal(shape, stddev=0.01)
     var = tf.Variable(initial, name)
     if wd is not None:
@@ -74,15 +81,18 @@ def weight_variable(shape, name='generic', wd=None):
 
 
 def bias_variable(shape):
+    """ create simple bias variable """
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
 
 def conv2d(x, W):
+    """ use same padding and stride of 1 """
     return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
 
 def max_pool_2x2(x):
+    """ 2 by 2 max pooling """
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
 
@@ -150,6 +160,11 @@ def inference_heavy(x, keep_prob):
 
 
 def inference(x, keep_prob):
+    """
+    2 convolutional layers (5 by 5 kernels), 1 local and a softmax layey for outputs
+    32, 64 feature maps
+    1024 fully connected
+    """
     with tf.variable_scope('conv1') as scope:
         W_conv1 = weight_variable([5, 5, 3, 32], 'weights', wd=0.004)
         b_conv1 = bias_variable([32])
@@ -183,12 +198,14 @@ def inference(x, keep_prob):
 
 
 def loss(y_conv, y_):
+    """ cross entropy loss """
     cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(y_conv), reduction_indices=[1]))
     tf.add_to_collection('losses', cross_entropy)
     return tf.add_n(tf.get_collection('losses'), name='total_loss')
 
 
 def train(total_loss, global_step):
+    """ minimize loss with Adam Optimizer for SGD, use learning rate decay"""
     # Variables that affect learning rate.
     num_batches_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / FLAGS.batch_size
     decay_steps = int(num_batches_per_epoch * NUM_EPOCHS_PER_DECAY)
@@ -205,6 +222,7 @@ def train(total_loss, global_step):
 
 
 def accuracy(y_conv, y_):
+    """ compare predictions with actual labels """
     correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
     tmp_accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     tf.scalar_summary('accuracy', tmp_accuracy)

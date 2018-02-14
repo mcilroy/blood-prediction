@@ -10,6 +10,10 @@ tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/checkpoints', """Directory wh
 
 
 def display_predictions(data, predictions):
+    """
+    Groups the cell images into their respective predicted class.
+    Useful to see visually which mistakes the model made and which class the mistakes occurred.
+    """
     images = [[] for i in range(5)]
     for i, pred in enumerate(predictions):
         images[pred].append(data[i])
@@ -33,7 +37,8 @@ def display_predictions(data, predictions):
 
 
 def evaluate():
-    """Train blood_model for a number of steps."""
+    """Load a saved model and generate predictions on test data. Then display the cell images
+    organized by which prediction they were under."""
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
     # randomize the inputs look

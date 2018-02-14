@@ -5,19 +5,20 @@ import numpy as np
 
 
 FLAGS = tf.app.flags.FLAGS
-RUN = 'pc9_with_vvc_7classes_split'
+RUN = 'new_test_hm'
 tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/checkpoints',
                            """Directory where to write event logs and checkpoint.""")
 tf.app.flags.DEFINE_string('summaries_dir', RUN+'/summaries',
                            """Summaries directory""")
 tf.app.flags.DEFINE_string('max_steps', 20000,
                            """Maximum steps to train the model""")
-tf.app.flags.DEFINE_string('continue_run', False,
+tf.app.flags.DEFINE_string('continue_run', True,
                            """Continue from when training stopped?""")
 
 
 def train():
-    """Train blood_model for a number of steps."""
+    """Train blood_model for a number of steps. Periodically evaluate training and validation accuracies """
+
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
     # Get images and labels for blood_model.
@@ -67,12 +68,6 @@ def train():
             validation_writer.add_summary(summary_validation, step)
             print("validation accuracy %g" % accuracy_validation)
 
-            # batch = blood_datasets.testing.next_batch()
-            # summary_test, accuracy_test = sess.run([summary_op, accuracy], feed_dict={
-            #         x: batch[0], y_: batch[1], keep_prob: 1.0})
-            # test_writer.add_summary(summary_test, step)
-            # print("test accuracy %g" % accuracy_test)
-
             # save checkpoint
             checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
             saver.save(sess, checkpoint_path, global_step=step)
@@ -80,6 +75,9 @@ def train():
 
 
 def check_filesystem():
+    """
+    either start a new checkpoint or continue from existing checkpoint folder
+    """
     if FLAGS.continue_run:
         # start a new run, set flag to continue, so there is nothing
         # check if something there, if not, create, but don't delete
@@ -104,6 +102,9 @@ def check_filesystem():
 
 
 def reload_checkpoint_if_exists(sess, saver, train_writer, validation_writer, test_writer):
+    """
+    restore existing model from checkpoint data
+    """
     global_step = -1
     if FLAGS.continue_run:
         ckpt = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)

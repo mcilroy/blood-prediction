@@ -4,16 +4,20 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import numpy as np
 import blood_data
+import os
+
 
 FLAGS = tf.app.flags.FLAGS
-RUN = 'pc9_with_vvc_7classes'
+RUN = 'pc9_with_vvc_7classes_tr35_va13'
 tf.app.flags.DEFINE_string('checkpoint_dir', RUN+'/checkpoints', """Directory where to read model checkpoints.""")
 #tf.app.flags.DEFINE_string('batch_size', 90, """batch size""")
 NUM_CLASSES = blood_data.NUM_CLASSES
 
 
 def show_hard_images(images_used, batch_predictions):
-
+    """
+    display images which the network model had low confidence in 40-60%
+    """
     fig = plt.figure()
     fig.suptitle('model is unsure 40-60% confidence', fontsize=14, fontweight='bold')
     grid = ImageGrid(fig, 111, nrows_ncols=(5, 2),
@@ -30,7 +34,9 @@ def show_hard_images(images_used, batch_predictions):
 
 
 def print_confusion_matrix(batch_predictions, labels):
-    """           actual
+    """
+    prints the confusion matrix between predictions and actual labels
+                  actual
     #   predict 1 0 0 0 0
                 0 1 0 0 0
     """
@@ -39,13 +45,18 @@ def print_confusion_matrix(batch_predictions, labels):
     matrix = np.zeros((NUM_CLASSES, NUM_CLASSES))
     for x in xrange(batch_predictions.shape[0]):
         matrix[pred[x], lab[x]] += 1
-    print(matrix)
+    #print(matrix)
+    print('\n'.join([''.join(['{:4d}'.format(int(item)) for item in row]) for row in matrix]))
     correct_predictions = np.equal(pred, lab)
     tmp_accuracy = np.mean(correct_predictions)
     print("accuracy: " + str(tmp_accuracy))
 
 
 def show_all_misclassified_images(images_used, batch_predictions, labels):
+    """
+    displays grid of misclassified predicted cell images visually. Organized to see what each cell's actual
+     cell type is and which one it was predicted to be.
+    """
     correct_predictions = np.equal(np.argmax(batch_predictions, 1), np.argmax(labels, 1))
     'actual: N, pred: M image1, image 2'
     'actual: N, pred: B image3'
@@ -87,7 +98,120 @@ def show_all_misclassified_images(images_used, batch_predictions, labels):
     plt.show()
 
 
+def plot_coulter_vs_predictions(predictions, labels):
+    """ Compare the coulter counter counts of cells in the image with the predicted counts based on the
+     individual predictions of cell images.
+     Plot the arrays of data against each other. They should plot a straight line.
+     Use polynomial regression to evaluate how well they match.
+    """
+    # load coulter counter data
+    NEUTROPHIL = "neutrophil"
+    MONOCYTE = "monocyte"
+    LYMPHOCYTE = "lymphocyte"
+    BASOPHIL = "basophil"
+    EOSINOPHIL = "eosinophil"
+    coulter_labels = dict()
+    counts = np.load(os.path.join("../../labeller/data", "coulter_count", 'V_vs_C_cc_scaled.npz'))
+    coulter_labels['neutrophils'] = counts[NEUTROPHIL]
+    coulter_labels['monocytes'] = counts[MONOCYTE]
+    coulter_labels['basophils'] = counts[BASOPHIL]
+    coulter_labels['eosinophils'] = counts[EOSINOPHIL]
+    coulter_labels['lymphocytes'] = counts[LYMPHOCYTE]
+    coulter_labels['wbc'] = counts['wbc']
+
+    cell_names_predictions = ['neutrophils', 'monocytes', 'basophils', 'eosinophils', 'lymphocytes', 'strange_eosinophils', 'no_cells']
+    patient_data = np.load(os.path.join("../../labeller/data/labelled_data", "pc9_with_vvc_7classes_validation_patients.npz"))
+    patient_data_all = np.concatenate((patient_data['neutro_patients'], patient_data['mono_patients'], patient_data['baso_patients'],
+                    patient_data['eosin_patients'], patient_data['lymp_patients'],
+                    patient_data['strange_eosin_patients'], patient_data['no_cell_patients']))
+    num_patients = len(np.unique(patient_data_all))
+    patient_counts = dict()
+
+    for cell_name in cell_names_predictions:
+        patient_counts[cell_name] = np.zeros(num_patients)
+    patient_counts['wbc'] = np.zeros(num_patients)
+    pred_col = np.argmax(predictions, 1)
+    for i, class_idx in enumerate(pred_col):
+        patient_idx = int(patient_data_all[i])
+        if cell_names_predictions[class_idx] == 'no_cells':
+            continue
+        if cell_names_predictions[class_idx] == 'strange_eosinophils':
+            patient_counts['neutrophils'][patient_idx] += 1
+        else:
+            patient_counts[cell_names_predictions[class_idx]][patient_idx] += 1
+        patient_counts['wbc'][patient_idx] += 1
+    del patient_counts['strange_eosinophils']
+    del patient_counts['no_cells']
+
+    # remove NaNs
+    nan_indexes = dict()
+    for key in coulter_labels:
+        mask = np.ones(len(coulter_labels[key]), dtype=bool)
+        nan_indexes[key] = [i for i, v in enumerate(coulter_labels[key]) if np.isnan(v)]
+        mask[nan_indexes[key]] = False
+        coulter_labels[key] = coulter_labels[key][mask]
+    indexes_remaining = dict()
+    for key in patient_counts:
+        mask = np.ones(len(patient_counts[key]), dtype=bool)
+        mask[nan_indexes[key]] = False
+        indexes_remaining[key] = []
+        for i, v in enumerate(mask):
+            if v:
+                indexes_remaining[key].append(i)
+        patient_counts[key] = patient_counts[key][mask]
+
+    # plot data
+    fig = plt.figure(5)
+    count = 1
+    print_string = ""
+    for key, value in coulter_labels.iteritems():
+        rval = polyfit(coulter_labels[key], patient_counts[key], 1)
+        print_string += key + " " + str(rval['determination']).format('%f')+"\n"
+        #ax1 = self.fig.add_subplot(111)
+        plt.subplot(3, 2, count)
+        #self.fig.add_subplot(blah)
+        count += 1
+        length = max(max(patient_counts[key]), max(coulter_labels[key]))
+        plt.axis([0, length, 0, length])
+        plt.scatter(patient_counts[key], coulter_labels[key])
+        plt.title(key)
+        plt.ylabel('Coulter Counter')
+        plt.xlabel('Predictions')
+    print(print_string)
+    plt.subplots_adjust(left=0.125, bottom=0.1, right=0.9, top=0.9, wspace=0.6, hspace=0.6)
+    #self.fig.tight_layout()
+    ######plt.show()
+    fig.savefig("../results/predictions_vs_coulter_counter", dpi=100)
+
+
+def polyfit(x, y, degree):
+    """ Polynomial Regression """
+    results = {}
+    coeffs = np.polyfit(x, y, degree)
+     # Polynomial Coefficients
+    results['polynomial'] = coeffs.tolist()
+    # r-squared
+    p = np.poly1d(coeffs)
+    # fit values, and mean
+    yhat = p(x)                         # or [p(z) for z in x]
+    ybar = np.sum(y)/len(y)          # or sum(y)/len(y)
+    ssreg = np.sum((yhat-ybar)**2)   # or sum([ (yihat - ybar)**2 for yihat in yhat])
+    sstot = np.sum((y - ybar)**2)    # or sum([ (yi - ybar)**2 for yi in y])
+    results['determination'] = ssreg / sstot
+    return results
+
+
+def get_prediction_labels(cell_names, predictions, labels):
+    """ determine the number of correct predictions """
+    prediction_labels = dict()
+    correct_predictions = np.equal(np.argmax(predictions, 1), np.argmax(labels, 1))
+    for i, cor_pred in enumerate(correct_predictions):
+        if cor_pred:
+            prediction_labels[cell_names[np.argmax(predictions[i], 1)]] += 1
+
+
 def show_misclassified_images(images_used, batch_predictions, labels):
+    """ Show first 4 misclassified images (for each cell type) in a grid """
     correct_predictions = np.equal(np.argmax(batch_predictions, 1), np.argmax(labels, 1))
 
     fig = plt.figure()
@@ -132,6 +256,7 @@ def show_misclassified_images(images_used, batch_predictions, labels):
 
 
 def show_filters(filters):
+    """ display filters in a grid from first layer """
     filters = np.rollaxis(filters, 3, 0)
     fig = plt.figure()
     fig.suptitle('filters 1st layer', fontsize=14, fontweight='bold')
@@ -148,6 +273,7 @@ def show_filters(filters):
 
 
 def show_filters_alt(filters):
+    """ display filters of 1st layer """
     filters = np.rollaxis(filters, 3, 0)
     fig = plt.figure()
     fig.suptitle('filters 1st layer', fontsize=14, fontweight='bold')
@@ -190,7 +316,8 @@ def eval_once():
 
 
 def evaluate():
-    """Train blood_model for a number of steps."""
+    """Load a saved model and generate predictions on test data. Then do experiments to evaluate
+    predictions."""
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
     # randomize the inputs look
@@ -218,10 +345,28 @@ def evaluate():
 
     blood_datasets = blood_model.inputs(eval_data=True)
 
-    batch_val = blood_datasets.validation.next_batch_untouched()
-    predictions = sess.run(conv_predictions, feed_dict={x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})
-    print_confusion_matrix(predictions, batch_val[2])
-    show_all_misclassified_images(batch_val[1], predictions, batch_val[2])
+    # batch_val = blood_datasets.validation.next_batch_untouched()  # [[70, 81, 81, 3], [70, 81, 81, 3], [70, 7]]
+    # predictions = sess.run(conv_predictions, feed_dict={x: batch_val[0], y_: batch_val[2], keep_prob: 1.0})  # [70, 7]
+    # print_confusion_matrix(predictions, batch_val[2])
+    # show_all_misclassified_images(batch_val[1], predictions, batch_val[2])
+
+    predictions = np.empty((blood_datasets.validation.num_examples, 7))
+    labels = np.empty((blood_datasets.validation.num_examples, 7))
+    images = np.empty((blood_datasets.validation.num_examples, 81, 81, 3))
+    #images_untouched = np.empty((blood_datasets.validation.num_examples, 81, 81, 3))
+
+    all_data, all_labels = blood_datasets.validation.get_all()
+    for i in xrange(int(blood_datasets.validation.num_examples / FLAGS.batch_size)):
+        batch_val = [all_data[i*FLAGS.batch_size: (i+1)*FLAGS.batch_size, :, :, :], all_labels[i*FLAGS.batch_size: (i+1)*FLAGS.batch_size, :]]
+        temp_predictions = sess.run(conv_predictions, feed_dict={x: batch_val[0], y_: batch_val[1], keep_prob: 1.0})
+        predictions[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size, :] = temp_predictions
+        images[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size, :] = batch_val[0]
+        #images_untouched[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size, :] = batch_val[1]
+        labels[i*FLAGS.batch_size:(i+1)*FLAGS.batch_size, :] = batch_val[1]
+    print_confusion_matrix(predictions, labels)
+    plot_coulter_vs_predictions(predictions, labels)
+    #show_all_misclassified_images(images, predictions, labels)
+
 
     #predictions = sess.run(conv_predictions, feed_dict={x: blood_datasets.validation.images, y_: blood_datasets.validation.labels, keep_prob: 1.0})
     #print_confusion_matrix(predictions, blood_datasets.validation.labels)
